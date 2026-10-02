@@ -66,8 +66,9 @@ if grep -q "<strong>$marker</strong>" <<< "$page"; then pass "Markdown still ren
 if grep -q "<script>alert('$marker')" <<< "$page"; then fail "raw <script> reached the page"; else pass "raw <script> is escaped"; fi
 
 echo "Regression: A01 open redirect (/learn)"
-expect_status 400 "external URL is refused" "/learn?url=https://example.com/"
-expect_status 302 "allowlisted URL still redirects" "/learn?url=https://www.khanacademy.org/"
+expect_status 400 "URL parameter is ignored" "/learn?url=https://example.com/"
+expect_status 400 "unknown resource is refused" "/learn?resource=https://example.com/"
+expect_status 302 "known resource still redirects" "/learn?resource=traditional-iras"
 
 echo "Regression: A10 SSRF (/research)"
 expect_status 400 "URL in symbol is refused" "/research?symbol=http://169.254.169.254/"

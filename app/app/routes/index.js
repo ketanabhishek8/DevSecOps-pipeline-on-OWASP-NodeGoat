@@ -67,21 +67,20 @@ const index = (app, db) => {
     app.post("/memos", isLoggedIn, memosHandler.addMemos);
 
     // Handle redirect for learning resources link
-    // Fix for A01 Broken Access Control (open redirect, CWE-601): only
-    // redirect to known learning sites over HTTPS, never to any URL a link
-    // supplies, so the app can't be used to send users to phishing pages.
-    const LEARNING_HOSTS = ["www.khanacademy.org"];
+    // Fix for A01 Broken Access Control (open redirect, CWE-601): the link
+    // used to carry the full destination URL, so anyone could craft a
+    // NodeGoat link that bounced users to a phishing site. Links now name a
+    // resource and the server looks up its address, so the destination never
+    // comes from the request.
+    const LEARNING_RESOURCES = {
+        "traditional-iras": "https://www.khanacademy.org/economics-finance-domain/core-finance/investment-vehicles-tutorial/ira-401ks/v/traditional-iras"
+    };
     app.get("/learn", isLoggedIn, (req, res) => {
-        let target;
-        try {
-            target = new URL(String(req.query.url));
-        } catch (e) {
-            return res.status(400).send("Invalid learning resource link");
+        const resource = String(req.query.resource || "");
+        if (!Object.prototype.hasOwnProperty.call(LEARNING_RESOURCES, resource)) {
+            return res.status(400).send("Unknown learning resource");
         }
-        if (target.protocol !== "https:" || !LEARNING_HOSTS.includes(target.hostname)) {
-            return res.status(400).send("Invalid learning resource link");
-        }
-        return res.redirect(target.href);
+        return res.redirect(LEARNING_RESOURCES[resource]);
     });
 
     // Research Page

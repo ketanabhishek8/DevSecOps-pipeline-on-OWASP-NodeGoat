@@ -7,7 +7,7 @@
 // NODE_ENV=production node artifacts/db-reset.js
 
 const { MongoClient } = require("mongodb");
-const { db } = require("../config/config");
+const { db: dbUrl } = require("../config/config");
 
 const USERS_TO_INSERT = [
     {
@@ -60,12 +60,13 @@ const parseResponse = (err, res, comm) => {
 
 
 // Starting here
-MongoClient.connect(db, (err, db) =>  {
+MongoClient.connect(dbUrl, { useNewUrlParser: true, useUnifiedTopology: true }, (err, client) =>  {
     if (err) {
         console.log("ERROR: connect");
         console.log(JSON.stringify(err));
         process.exit(1);
     }
+    const db = client.db();
     console.log("Connected to the database");
 
     const collectionNames = [

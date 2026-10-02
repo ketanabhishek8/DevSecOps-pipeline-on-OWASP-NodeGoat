@@ -1,10 +1,13 @@
-FROM node:12-alpine
+# Node 12 reached end of life in April 2022 and gets no security fixes.
+# Node 22 is a maintained LTS release.
+FROM node:22-alpine
 ENV WORKDIR /usr/src/app/
 WORKDIR $WORKDIR
 COPY package*.json $WORKDIR
-RUN npm install --production --no-cache
+# npm ci installs exactly what package-lock.json pins (no silent upgrades)
+RUN npm ci --omit=dev --no-audit --no-fund
 
-FROM node:12-alpine
+FROM node:22-alpine
 ENV USER node
 ENV WORKDIR /home/$USER/app
 WORKDIR $WORKDIR

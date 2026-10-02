@@ -3,10 +3,12 @@
 import contextlib
 import io
 import json
+import os
 import sys
 import tempfile
 import unittest
 from datetime import date
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -144,9 +146,10 @@ class EndToEndTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             write_reports(tmp, skip=skip)
-            # Keep the gate's console output out of the test log, so CI logs
-            # don't show fake "missing report" errors from these fixtures.
-            with contextlib.redirect_stdout(io.StringIO()):
+            # Keep these fixture reports out of the CI log and off the run's
+            # summary page, where they would be mistaken for real results.
+            env = {k: v for k, v in os.environ.items() if k != "GITHUB_STEP_SUMMARY"}
+            with mock.patch.dict(os.environ, env, clear=True), contextlib.redirect_stdout(io.StringIO()):
                 code = aggregate.main(["--results", str(tmp), "--out-md", str(tmp / "r.md"),
                                        "--out-json", str(tmp / "r.json"), *extra])
             return code, (tmp / "r.md").read_text(), json.loads((tmp / "r.json").read_text())

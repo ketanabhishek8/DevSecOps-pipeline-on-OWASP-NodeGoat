@@ -1,5 +1,7 @@
 """Unit tests for scripts/aggregate.py. Run: python -m unittest discover -s scripts/tests -v"""
 
+import contextlib
+import io
 import json
 import sys
 import tempfile
@@ -142,8 +144,11 @@ class EndToEndTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             write_reports(tmp, skip=skip)
-            code = aggregate.main(["--results", str(tmp), "--out-md", str(tmp / "r.md"),
-                                   "--out-json", str(tmp / "r.json"), *extra])
+            # Keep the gate's console output out of the test log, so CI logs
+            # don't show fake "missing report" errors from these fixtures.
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = aggregate.main(["--results", str(tmp), "--out-md", str(tmp / "r.md"),
+                                       "--out-json", str(tmp / "r.json"), *extra])
             return code, (tmp / "r.md").read_text(), json.loads((tmp / "r.json").read_text())
 
     def test_fails_on_high(self):

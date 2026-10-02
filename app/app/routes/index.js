@@ -67,9 +67,21 @@ const index = (app, db) => {
     app.post("/memos", isLoggedIn, memosHandler.addMemos);
 
     // Handle redirect for learning resources link
+    // Fix for A01 Broken Access Control (open redirect, CWE-601): only
+    // redirect to known learning sites over HTTPS, never to any URL a link
+    // supplies, so the app can't be used to send users to phishing pages.
+    const LEARNING_HOSTS = ["www.khanacademy.org"];
     app.get("/learn", isLoggedIn, (req, res) => {
-        // Insecure way to handle redirects by taking redirect url from query string
-        return res.redirect(req.query.url);
+        let target;
+        try {
+            target = new URL(String(req.query.url));
+        } catch (e) {
+            return res.status(400).send("Invalid learning resource link");
+        }
+        if (target.protocol !== "https:" || !LEARNING_HOSTS.includes(target.hostname)) {
+            return res.status(400).send("Invalid learning resource link");
+        }
+        return res.redirect(target.href);
     });
 
     // Research Page

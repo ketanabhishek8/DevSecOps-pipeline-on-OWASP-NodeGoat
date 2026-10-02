@@ -69,19 +69,14 @@ const index = (app, db) => {
     // Handle redirect for learning resources link
     // Fix for A01 Broken Access Control (open redirect, CWE-601): the link
     // used to carry the full destination URL, so anyone could craft a
-    // NodeGoat link that bounced users to a phishing site. Links now name a
-    // resource and the server looks up its address, so the destination never
-    // comes from the request.
+    // NodeGoat link that bounced users to a phishing site. Each resource now
+    // has its own fixed route, so no part of a redirect comes from the request.
     const LEARNING_RESOURCES = {
         "traditional-iras": "https://www.khanacademy.org/economics-finance-domain/core-finance/investment-vehicles-tutorial/ira-401ks/v/traditional-iras"
     };
-    app.get("/learn", isLoggedIn, (req, res) => {
-        const resource = String(req.query.resource || "");
-        if (!Object.prototype.hasOwnProperty.call(LEARNING_RESOURCES, resource)) {
-            return res.status(400).send("Unknown learning resource");
-        }
-        return res.redirect(LEARNING_RESOURCES[resource]);
-    });
+    for (const [name, destination] of Object.entries(LEARNING_RESOURCES)) {
+        app.get(`/learn/${name}`, isLoggedIn, (req, res) => res.redirect(destination));
+    }
 
     // Research Page
     app.get("/research", isLoggedIn, researchHandler.displayResearch);

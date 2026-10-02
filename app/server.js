@@ -6,11 +6,10 @@ const bodyParser = require("body-parser");
 const session = require("express-session");
 // const csrf = require('csurf');
 const nunjucks = require("nunjucks"); // Template engine (replaces the abandoned swig)
-// const helmet = require("helmet");
+const helmet = require("helmet");
 const MongoClient = require("mongodb").MongoClient; // Driver for connecting to MongoDB
 const http = require("http");
 const { marked } = require("marked"); // v4+ uses a named export
-//const nosniff = require('dont-sniff-mimetype');
 const app = express(); // Web framework to handle routing requests
 const routes = require("./app/routes");
 const { port, db: dbUrl, cookieSecret } = require("./config/config"); // Application config properties
@@ -39,34 +38,22 @@ MongoClient.connect(dbUrl, { useNewUrlParser: true, useUnifiedTopology: true }, 
     const db = client.db();
     console.log(`Connected to the database`);
 
-    /*
-    // Fix for A5 - Security MisConfig
-    // TODO: Review the rest of helmet options, like "xssFilter"
-    // Remove default x-powered-by response header
-    app.disable("x-powered-by");
-
-    // Prevent opening page in frame or iframe to protect from clickjacking
-    app.use(helmet.frameguard()); //xframe deprecated
-
-    // Prevents browser from caching and storing page
-    app.use(helmet.noCache());
-
-    // Allow loading resources only from white-listed domains
-    app.use(helmet.contentSecurityPolicy()); //csp deprecated
-
-    // Allow communication only on HTTPS
-    app.use(helmet.hsts());
-
-    // TODO: Add another vuln: https://github.com/helmetjs/helmet/issues/26
-    // Enable XSS filter in IE (On by default)
-    // app.use(helmet.iexss());
-    // Now it should be used in hit way, but the README alerts that could be
-    // dangerous, like specified in the issue.
-    // app.use(helmet.xssFilter({ setOnOldIE: true }));
-
-    // Forces browser to only use the Content-Type set in the response header instead of sniffing or guessing it
-    app.use(nosniff());
-    */
+    // Fix for A05 Security Misconfiguration: send the standard security
+    // headers ZAP reported missing (Content-Security-Policy, X-Frame-Options,
+    // X-Content-Type-Options and others) and stop advertising Express via
+    // X-Powered-By. helmet 2 was listed but never enabled, and its old
+    // dependencies were themselves vulnerable.
+    app.use(helmet({
+        contentSecurityPolicy: {
+            directives: {
+                // Tutorial pages embed OWASP talks from YouTube
+                "frame-src": ["https://www.youtube.com"],
+                // The app is served over plain HTTP in this demo, so asking
+                // browsers to upgrade every request to HTTPS would break it
+                "upgrade-insecure-requests": null
+            }
+        }
+    }));
 
     // Adding/ remove HTTP Headers for security
     app.use(favicon(__dirname + "/app/assets/favicon.ico"));

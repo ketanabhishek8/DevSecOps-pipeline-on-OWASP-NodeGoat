@@ -20,7 +20,7 @@ Copy scanner, rule, severity and location from the combined report (Actions run 
 | # | Scanner | Rule | Severity | OWASP | Location | Verdict | Fix (commit) | Owner | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | Semgrep | `code-string-concat`, njsscan `eval_nodejs` (6 hits) | High | A03 Injection (CWE-95) | `app/routes/contributions.js:32-34` | True positive: user input passed to `eval()` | `065d530` strict whole-number parsing | | Fixed |
-| 2 | Semgrep | njsscan `express_open_redirect` | High | A01 Broken Access Control (CWE-601) | `app/routes/index.js:72` | True positive: `/learn` redirected to any URL | `64753ab` HTTPS host allowlist | | Fixed |
+| 2 | Semgrep, then ZAP | njsscan `express_open_redirect`; ZAP 10028 Off-site Redirect | High | A01 Broken Access Control (CWE-601) | `app/routes/index.js:72` | True positive: `/learn` redirected to any URL | `64753ab` host allowlist; ZAP still flagged the URL parameter, so `da0fc7c` server-side lookup; Semgrep still saw request data in `redirect()`, so `4afef6b` one fixed route per resource | | Fixed |
 | 3 | Semgrep | njsscan `node_ssrf` | High | A10 SSRF (CWE-918) | `app/routes/research.js:15` | True positive: server fetched a client-supplied URL | `fd21c0e` fixed base URL + symbol validation | | Fixed |
 | 4 | Semgrep | njsscan `node_password` (2 hits) | High | A07 (CWE-798) | `app/routes/session.js:61, 172` | False positive: error-message strings | `0404280` accepted with reason, review 2027-04-01 | | Accepted |
 | 5 | gitleaks | `private-key` | High | A07 (CWE-798) | `app/artifacts/cert/server.key` | True positive: unused key committed | `371617a` key pair deleted, HTTPS reads paths from env | | Fixed |
@@ -40,6 +40,7 @@ Copy scanner, rule, severity and location from the combined report (Actions run 
 | Missing security headers reported by ZAP (CSP, X-Frame-Options, X-Content-Type-Options) and `X-Powered-By` leak | A05 | `276038f` helmet 8 |
 | Container ran Node 12 (end of life since April 2022) | A06 | `38870b9` Node 22 LTS, `npm ci` |
 | Template break during the swig → Nunjucks migration (all logged-in pages returned 500) | — | `d54a62c`, caught by the CI smoke tests |
+| A first open-redirect fix that two different scanners still flagged (shows why SAST and DAST are both needed) | A01 | `da0fc7c`, `4afef6b` |
 
 ## Remaining open findings (medium / low, below the gate threshold)
 

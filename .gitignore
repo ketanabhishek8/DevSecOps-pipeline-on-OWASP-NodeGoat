@@ -1,0 +1,13 @@
+# Local scanner output at the repo root (the pipeline uploads these as artifacts).
+# Copies saved under reports/ for the before/after comparison are still tracked.
+/results/
+/zap/
+/*.sarif
+/zap.json
+/security-report.md
+/security-report.json
+
+node_modules/
+__pycache__/
+.venv/
+.DS_Store

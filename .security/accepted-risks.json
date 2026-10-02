@@ -1,0 +1,4 @@
+{
+  "_help": "Findings the team has reviewed and decided to accept. Each entry needs tool, rule_id and reason; location is a glob (default *) and expires is YYYY-MM-DD. See README > Accepted risks.",
+  "accepted": []
+}

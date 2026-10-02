@@ -1,0 +1,6 @@
+# Third-party, minified and test code: not part of the app we are securing,
+# so findings there would only add noise to the SAST results.
+node_modules/
+app/app/assets/vendor/
+*.min.js
+app/test/

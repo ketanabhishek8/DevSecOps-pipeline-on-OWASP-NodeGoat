@@ -1,0 +1,233 @@
+# DevSecOps security pipeline for OWASP NodeGoat.
+#
+# Four scanners run in parallel, each covering a different layer:
+#   SAST    Semgrep   -> the application source code
+#   SCA     Trivy     -> third-party npm dependencies (known CVEs)
+#   Secrets gitleaks  -> hardcoded passwords, keys and tokens
+#   DAST    OWASP ZAP -> the running application, tested over HTTP
+#
+# The scanners never fail the build themselves. They only produce reports.
+# The final "Security gate" job merges every report with scripts/aggregate.py
+# and decides pass/fail from one policy (FAIL_ON below). If any scanner
+# crashes and produces no report, the gate fails closed.
+
+name: Security Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  APP_DIR: app
+  # Gate policy: fail the build if any finding is at or above this severity.
+  # One of: critical, high, medium, low, never
+  FAIL_ON: high
+  # Pinned scanner versions, so results are reproducible run to run.
+  SEMGREP_IMAGE: semgrep/semgrep:1.179.0
+  TRIVY_IMAGE: aquasec/trivy:0.75.0
+  GITLEAKS_IMAGE: zricethezav/gitleaks:v8.30.1
+  ZAP_IMAGE: zaproxy/zap-stable:2.17.0
+
+jobs:
+  sast:
+    name: SAST · Semgrep
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Run Semgrep
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src "$SEMGREP_IMAGE" \
+            semgrep scan \
+              --config p/javascript \
+              --config p/nodejsscan \
+              --config p/owasp-top-ten \
+              --sarif --output semgrep.sarif \
+              "$APP_DIR"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: scan-semgrep
+          path: semgrep.sarif
+
+      # Shows findings in the repo's Security tab. Needs a public repo
+      # (or GitHub Advanced Security), so it is allowed to fail.
+      - name: Upload to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        continue-on-error: true
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+  sca:
+    name: SCA · Trivy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Run Trivy dependency scan
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src "$TRIVY_IMAGE" \
+            fs --scanners vuln \
+              --format sarif --output trivy.sarif \
+              "$APP_DIR"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: scan-trivy
+          path: trivy.sarif
+
+      - name: Upload to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        continue-on-error: true
+        with:
+          sarif_file: trivy.sarif
+          category: trivy
+
+  secrets:
+    name: Secrets · gitleaks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v7
+
+      # Scans the current files. --redact keeps secret values out of the logs.
+      - name: Run gitleaks
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src "$GITLEAKS_IMAGE" \
+            dir /src \
+              --redact \
+              --exit-code 0 \
+              --report-format sarif --report-path /src/gitleaks.sarif
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: scan-gitleaks
+          path: gitleaks.sarif
+
+      - name: Upload to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        continue-on-error: true
+        with:
+          sarif_file: gitleaks.sarif
+          category: gitleaks
+
+  dast:
+    name: DAST · OWASP ZAP
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Start NodeGoat and MongoDB
+        working-directory: ${{ env.APP_DIR }}
+        run: docker compose up -d --build
+
+      - name: Wait for the app to respond
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:4000/login > /dev/null; then
+              echo "NodeGoat is up"; exit 0
+            fi
+            sleep 5
+          done
+          echo "NodeGoat did not start in time"
+          docker compose -f "$APP_DIR/docker-compose.yml" logs
+          exit 1
+
+      # Baseline scan = spider the site and check responses passively.
+      # Exit codes: 0 clean, 1 FAIL rules hit, 2 warnings, 3+ ZAP error.
+      # Only a ZAP error stops this job; findings are judged by the gate.
+      - name: Run ZAP baseline scan
+        run: |
+          mkdir -p zap && chmod 777 zap
+          set +e
+          docker run --rm --network host -v "$PWD/zap:/zap/wrk:rw" "$ZAP_IMAGE" \
+            zap-baseline.py -t http://localhost:4000 -m 2 -J zap.json -r zap.html
+          code=$?
+          set -e
+          echo "ZAP exit code: $code"
+          if [ "$code" -ge 3 ]; then exit "$code"; fi
+          cp zap/zap.json zap.json
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: scan-zap
+          path: |
+            zap.json
+            zap/zap.html
+
+      - name: Stop the app
+        if: always()
+        working-directory: ${{ env.APP_DIR }}
+        run: docker compose down -v
+
+  gate:
+    name: Security gate
+    needs: [sast, sca, secrets, dast]
+    # Run even if a scanner job failed, so the gate can fail closed.
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Test the aggregator
+        run: python -m unittest discover -s scripts/tests -v
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: scan-*
+          merge-multiple: true
+          path: results
+
+      - name: Merge reports and apply the gate
+        run: |
+          python scripts/aggregate.py \
+            --results results \
+            --accepted .security/accepted-risks.json \
+            --fail-on "$FAIL_ON" \
+            --out-md security-report.md \
+            --out-json security-report.json
+
+      - name: Upload combined report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: security-report
+          path: |
+            security-report.md
+            security-report.json
+            results/
+
+      - name: Comment the report on the pull request
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr comment "$PR" --edit-last --body-file security-report.md \
+            || gh pr comment "$PR" --body-file security-report.md

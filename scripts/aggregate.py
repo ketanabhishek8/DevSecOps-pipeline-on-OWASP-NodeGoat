@@ -118,7 +118,7 @@ def _first_line(text: str, limit: int = 140) -> str:
 
 def _cwe_from(texts: list[str]) -> str:
     for text in texts:
-        match = re.search(r"CWE-(\d+)", text or "")
+        match = re.search(r"CWE-(\d+)", text or "", flags=re.IGNORECASE)
         if match:
             return f"CWE-{match.group(1)}"
     return ""
@@ -175,7 +175,8 @@ def _sarif_location(result: dict) -> str:
 
 def _trivy_title(rule: dict, result: dict) -> tuple[str, str]:
     message = result.get("message", {}).get("text", "")
-    fields = dict(re.findall(r"^([A-Za-z ]+):\s*(.+)$", message, flags=re.MULTILINE))
+    # [ \t]* rather than \s*, so an empty field never swallows the next line
+    fields = {k: v.strip() for k, v in re.findall(r"^([A-Za-z ]+):[ \t]*(.*)$", message, flags=re.MULTILINE)}
     package = fields.get("Package", "")
     version = fields.get("Installed Version", "")
     summary = _first_line(rule.get("shortDescription", {}).get("text", ""), 100)

@@ -107,6 +107,20 @@ class ParsingTests(unittest.TestCase):
         self.assertEqual((csp.severity, csp.owasp, csp.detail), ("medium", "A05", "2 URL(s) affected"))
         self.assertEqual((cookie.severity, cookie.owasp), ("low", "A05"))
 
+    def test_lowercase_cwe_tag_is_mapped(self):
+        data = {"runs": [{"tool": {"driver": {"rules": [
+            {"id": "njsscan.eval", "properties": {"tags": ["cwe-95", "security"]}}]}},
+            "results": [{"ruleId": "njsscan.eval", "level": "error", "message": {"text": "eval"}}]}]}
+        [f] = aggregate.parse_sarif("semgrep", data)
+        self.assertEqual((f.cwe, f.owasp), ("CWE-95", "A03"))
+
+    def test_trivy_without_fixed_version(self):
+        data = json.loads(json.dumps(TRIVY))
+        data["runs"][0]["results"][0]["message"]["text"] = (
+            "Package: swig\nInstalled Version: 1.4.2\nSeverity: HIGH\nFixed Version: \nLink: [CVE](https://x)")
+        [f] = aggregate.parse_sarif("trivy", data)
+        self.assertEqual(f.detail, "No fixed version yet")
+
     def test_duplicates_are_dropped(self):
         findings = aggregate.parse_sarif("semgrep", SEMGREP) * 2
         self.assertEqual(len(aggregate.deduplicate(findings)), 1)

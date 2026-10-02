@@ -173,6 +173,15 @@ jobs:
             zap.json
             zap/zap.html
 
+      # Every page must still render and every fixed vulnerability must stay
+      # fixed. Runs after ZAP so the scan report is uploaded either way.
+      - name: Smoke and security regression tests
+        run: bash scripts/smoke_test.sh http://localhost:4000
+
+      - name: App logs on failure
+        if: failure()
+        run: docker compose -f "$APP_DIR/docker-compose.yml" logs web | tail -100
+
       - name: Stop the app
         if: always()
         working-directory: ${{ env.APP_DIR }}

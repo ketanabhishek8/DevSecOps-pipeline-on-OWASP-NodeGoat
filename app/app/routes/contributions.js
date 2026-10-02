@@ -27,18 +27,15 @@ function ContributionsHandler(db) {
 
     this.handleContributionsUpdate = (req, res, next) => {
 
-        /*jslint evil: true */
-        // Insecure use of eval() to parse inputs
-        const preTax = eval(req.body.preTax);
-        const afterTax = eval(req.body.afterTax);
-        const roth = eval(req.body.roth);
+        // Fix for A03 Injection (server-side JavaScript injection, CWE-95):
+        // the form values used to go through eval(), which ran any JavaScript
+        // a user typed on the server. They are now parsed strictly as whole
+        // numbers; anything else becomes NaN and fails the validation below.
+        const toPercent = value => (/^\d{1,3}$/.test(String(value).trim()) ? Number.parseInt(value, 10) : NaN);
+        const preTax = toPercent(req.body.preTax);
+        const afterTax = toPercent(req.body.afterTax);
+        const roth = toPercent(req.body.roth);
 
-        /*
-        //Fix for A1 -1 SSJS Injection attacks - uses alternate method to eval
-        const preTax = parseInt(req.body.preTax);
-        const afterTax = parseInt(req.body.afterTax);
-        const roth = parseInt(req.body.roth);
-        */
         const {
             userId
         } = req.session;

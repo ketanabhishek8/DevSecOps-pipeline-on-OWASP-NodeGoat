@@ -1,5 +1,4 @@
 const ProfileDAO = require("../data/profile-dao").ProfileDAO;
-const ESAPI = require("node-esapi");
 const {
     environmentalScripts
 } = require("../../config/config");
@@ -21,14 +20,8 @@ function ProfileHandler(db) {
             if (err) return next(err);
             doc.userId = userId;
 
-            // @TODO @FIXME
-            // while the developer intentions were correct in encoding the user supplied input so it
-            // doesn't end up as an XSS attack, the context is incorrect as it is encoding the firstname for HTML
-            // while this same variable is also used in the context of a URL link element
-            doc.website = ESAPI.encoder().encodeForHTML(doc.website);
-            // fix it by replacing the above with another template variable that is used for 
-            // the context of a URL in a link header
-            // doc.website = ESAPI.encoder().encodeForURL(doc.website)
+            // HTML escaping is done by the template engine's autoescape, so
+            // encoding here as well would double-escape the value.
 
             return res.render("profile", {
                 ...doc,

@@ -462,6 +462,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"{len(active)} open finding(s), {len(accepted)} accepted, {len(blocking)} blocking, {len(errors)} scanner error(s)")
     for error in errors:
         print(f"  error: {error}")
+    for f in sort_findings(blocking):
+        print(f"  blocking: {f.severity.upper():8} {f.tool:8} {f.rule_id}  {f.title}  @ {f.location}")
     print("Gate PASSED" if passed else f"Gate FAILED (policy: fail on {args.fail_on})")
     return 0 if passed else 1
 
